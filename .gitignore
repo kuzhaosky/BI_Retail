@@ -1,1 +1,13 @@
+docker/Volumes/
+
+logs/
+
+*.pyc
+__pycache__/
+
 .env
+*.env
+
+.cache/
+
+project_structure.json
