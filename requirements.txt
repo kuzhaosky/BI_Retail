@@ -1,0 +1,21 @@
+# Data Manipulation and ETL
+pandas>=2.1.0
+pyspark >= 3.4.1
+
+# Database Connectivity
+psycopg2-binary >= 2.9.1
+
+# API Interaction
+requests~=2.31.0
+
+# Environment Variables Management
+python-dotenv
+
+# Additional Utilities
+numpy >= 2.0.0 
+
+# Optional: Data Validation and Quality
+great-expectations~=0.17.10
+
+# AI
+openpyxl>=3.0.9
