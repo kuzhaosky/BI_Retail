@@ -1,3 +1,5 @@
+# scripts/datawarehouse.py
+
 import os
 import psycopg2
 from psycopg2 import sql
@@ -7,11 +9,11 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 dotenv_path = os.path.abspath(os.path.join(script_dir, '..', 'docker', '.env'))
 load_dotenv(dotenv_path)
 
-DB_HOST = 'localhost'
-DB_PORT = '5433' 
-DW_DB_NAME = os.getenv('DW_POSTGRES_DB', 'datawarehouse')
-DW_DB_USER = os.getenv('POSTGRES_USER', 'dw_user')
-DW_DB_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'dw_password')
+DB_HOST = os.getenv('DB_HOST', 'postgres')
+DB_PORT = os.getenv('DB_PORT', '5432')
+DW_DB_NAME = os.getenv('DW_POSTGRES_DB', 'AGORA_DATA_WHEREHOUSE')
+DW_DB_USER = os.getenv('POSTGRES_USER', 'airflow')
+DW_DB_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'airflow')
 
 def connect_db(dbname):
     """Establishes a connection to the specified PostgreSQL database."""
@@ -61,7 +63,7 @@ def drop_tables(conn):
         "DIM_TEMPS",
         "DIM_Time",
         "DIM_PAIEMENT",
-        "DIM_SHOPING_MALL"
+        "DIM_SHOPPING_MALL"
     ]
     
     try:
@@ -87,7 +89,7 @@ def create_tables(conn):
         # Dimension Tables
         """
         CREATE TABLE IF NOT EXISTS DIM_PRODUIT (
-            SKU UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            SKU VARCHAR(255) PRIMARY KEY,
             Categorie VARCHAR(255),
             ProductName VARCHAR(255),
             Price FLOAT,
@@ -96,22 +98,22 @@ def create_tables(conn):
         """,
         """
         CREATE TABLE IF NOT EXISTS DIM_SUPPLIER (
-            SupplierID UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            SupplierID VARCHAR(255) PRIMARY KEY,
             SupplierName VARCHAR(255),
-            City VARCHAR(100),
-            Country VARCHAR(100)
+            SupplierCity VARCHAR(100),
+            SupplierCountry VARCHAR(100)
         );
         """,
         """
         CREATE TABLE IF NOT EXISTS DIM_TRANSPORT_MODE (
-            TransportModeID UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            TransportModeID VARCHAR(255) PRIMARY KEY,
             TransportationModes VARCHAR(255),
             Routes VARCHAR(255)
         );
         """,
         """
         CREATE TABLE IF NOT EXISTS DIM_CLIENT (
-            ClientID UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            ClientID VARCHAR(255) PRIMARY KEY,
             LastName VARCHAR(100),
             FirstName VARCHAR(100),
             Gender VARCHAR(10),
@@ -124,15 +126,18 @@ def create_tables(conn):
         """,
         """
         CREATE TABLE IF NOT EXISTS DIM_TEMPS (
-            DateTransaction DATE PRIMARY KEY,
+            TransactionDate DATE PRIMARY KEY,
             Jour INTEGER,
             Mois INTEGER,
-            Annee INTEGER
+            Annee INTEGER,
+            Quarter INTEGER,
+            DayOfWeek INTEGER,
+            IsWeekend BOOLEAN
         );
         """,
         """
         CREATE TABLE IF NOT EXISTS DIM_Time (
-            deliveryDate DATE PRIMARY KEY,
+            DeliveryDate DATE PRIMARY KEY,
             Jour INTEGER,
             Mois INTEGER,
             Annee INTEGER
@@ -140,13 +145,13 @@ def create_tables(conn):
         """,
         """
         CREATE TABLE IF NOT EXISTS DIM_PAIEMENT (
-            PaiementID UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            PaiementID VARCHAR(255) PRIMARY KEY,
             MethodePaiement VARCHAR(100)
         );
         """,
         """
-        CREATE TABLE IF NOT EXISTS DIM_SHOPING_MALL (
-            MallID UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        CREATE TABLE IF NOT EXISTS DIM_SHOPPING_MALL (
+            MallID VARCHAR(255) PRIMARY KEY,
             Name VARCHAR(255),
             Address VARCHAR(255),
             City VARCHAR(100),
@@ -157,30 +162,41 @@ def create_tables(conn):
         # Fact Tables
         """
         CREATE TABLE IF NOT EXISTS FACT_SUPPLY_CHAIN (
-            FactID UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            SKU UUID REFERENCES DIM_PRODUIT(SKU),
-            SupplierID UUID REFERENCES DIM_SUPPLIER(SupplierID),
-            TransportModeID UUID REFERENCES DIM_TRANSPORT_MODE(TransportModeID),
-            NumberOfProductsSold INTEGER,
-            RevenueGenerated FLOAT,
-            StockLevels INTEGER,
+            FactID VARCHAR(255) PRIMARY KEY,
+            SKU VARCHAR(255),
+            SupplierID VARCHAR(255),
+            TransportModeID VARCHAR(255),
+            DeliveryDate DATE,
+            StockLevel INTEGER,
             OrderQuantities INTEGER,
             ShippingCosts FLOAT,
+            RevenueGenerated FLOAT,
             ManufacturingCosts FLOAT,
             DefectRates FLOAT,
-            deliveryDate DATE REFERENCES DIM_Time(deliveryDate)
+            FOREIGN KEY (SKU) REFERENCES DIM_PRODUIT(SKU),
+            FOREIGN KEY (SupplierID) REFERENCES DIM_SUPPLIER(SupplierID),
+            FOREIGN KEY (TransportModeID) REFERENCES DIM_TRANSPORT_MODE(TransportModeID),
+            FOREIGN KEY (DeliveryDate) REFERENCES DIM_Time(DeliveryDate)
         );
         """,
         """
         CREATE TABLE IF NOT EXISTS FACT_TRANSACTIONS (
-            TransactionID UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            ClientID UUID REFERENCES DIM_CLIENT(ClientID),
-            DateTransaction DATE REFERENCES DIM_TEMPS(DateTransaction),
-            PaiementID UUID REFERENCES DIM_PAIEMENT(PaiementID),
-            ProduitID UUID REFERENCES DIM_PRODUIT(SKU),
-            MallID UUID REFERENCES DIM_SHOPING_MALL(MallID),
+            FactID VARCHAR(255) PRIMARY KEY,
+            TransactionID VARCHAR(255),
+            ClientID VARCHAR(255),
+            TransactionDate DATE,
+            PaiementID VARCHAR(255),
+            SKU VARCHAR(255),
+            MallID VARCHAR(255),
             Quantite INTEGER,
-            PrixTotal FLOAT
+            PrixAchat FLOAT,
+            PrixVente FLOAT,
+            Profit FLOAT,
+            FOREIGN KEY (ClientID) REFERENCES DIM_CLIENT(ClientID),
+            FOREIGN KEY (TransactionDate) REFERENCES DIM_TEMPS(TransactionDate),
+            FOREIGN KEY (PaiementID) REFERENCES DIM_PAIEMENT(PaiementID),
+            FOREIGN KEY (SKU) REFERENCES DIM_PRODUIT(SKU),
+            FOREIGN KEY (MallID) REFERENCES DIM_SHOPPING_MALL(MallID)
         );
         """
     ]
@@ -200,13 +216,14 @@ def create_tables(conn):
         exit(1)
 
 def main():
-    # Step 1: Connect to the default 'postgres' database to create the 'datawarehouse' database
+    # Step 1: Connect to the default 'postgres' database to create the 'AGORA_DATA_WHEREHOUSE' database
     conn_default = connect_db('postgres')
     create_database(conn_default, DW_DB_NAME)
     conn_default.close()
 
-    # Step 2: Connect to the newly created 'datawarehouse' database to create tables
+    # Step 2: Connect to the newly created 'AGORA_DATA_WHEREHOUSE' database to create tables
     conn_dw = connect_db(DW_DB_NAME)
+    drop_tables(conn_dw) 
     create_tables(conn_dw)
     conn_dw.close()
 

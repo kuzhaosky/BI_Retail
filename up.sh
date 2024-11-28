@@ -1,6 +1,14 @@
 #!/bin/bash
 
-VOLUMES_DIR="./docker/Volumes"
+# Exit on error
+set -e
+
+# Get the script's directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+
+# Define the volumes directory
+VOLUMES_DIR="$PROJECT_ROOT/docker/Volumes"
 
 # Create the Postgres data volume directory if it doesn't exist
 if [ ! -d "$VOLUMES_DIR/postgres-db-volume" ]; then
@@ -10,23 +18,23 @@ if [ ! -d "$VOLUMES_DIR/postgres-db-volume" ]; then
 fi
 
 # Create necessary Airflow directories if they don't exist
-AIRFLOW_DIRS=(dags logs config plugins)
-for DIR in "${AIRFLOW_DIRS[@]}"; do
-  if [ ! -d "$DIR" ]; then
+for DIR in dags logs plugins; do
+  if [ ! -d "$PROJECT_ROOT/$DIR" ]; then
     echo "Creating $DIR directory..."
-    mkdir -p "$DIR"
+    mkdir -p "$PROJECT_ROOT/$DIR"
   fi
 done
 
-# Ensure requirements.txt exists
-if [ ! -f "./requirements.txt" ]; then
-    echo "Error: requirements.txt not found in the current directory. Exiting."
-    exit 1
+# Ensure requirements.txt exists in the docker directory
+if [ ! -f "$PROJECT_ROOT/requirements.txt" ]; then
+  echo "Error: requirements.txt not found in the docker directory. Exiting."
+  exit 1
 fi
 
 # Build and start the containers
 echo "Starting Docker Compose setup..."
-docker compose -f docker/docker-compose.yaml build
-docker compose -f docker/docker-compose.yaml up -d
+cd "$PROJECT_ROOT/docker"
+docker compose build
+docker compose up -d
 
 echo "Docker Compose setup is running."
