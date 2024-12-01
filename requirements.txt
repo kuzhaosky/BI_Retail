@@ -1,5 +1,4 @@
-# requirements.txt
-
+cryptography
 # Data Manipulation and ETL
 pandas>=2.1.0
 pyspark>=3.4.1
