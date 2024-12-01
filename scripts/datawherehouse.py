@@ -13,7 +13,7 @@ DB_HOST = os.getenv('DB_HOST', 'postgres')
 DB_PORT = os.getenv('DB_PORT', '5432')
 DW_DB_NAME = os.getenv('DW_POSTGRES_DB', 'AGORA_DATA_WHEREHOUSE')
 DW_DB_USER = os.getenv('POSTGRES_USER', 'airflow')
-DW_DB_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'airflow')
+DW_DB_PASSWORD = os.getenv('POSTGRES_PASSWORD', 'postgres')
 
 def connect_db(dbname):
     """Establishes a connection to the specified PostgreSQL database."""
